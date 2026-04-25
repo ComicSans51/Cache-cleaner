@@ -1,0 +1,8 @@
+Package: cache-cleaner
+Version: 1.0
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3
+Maintainer: Comic Sans <a40166895@gmail.com>
+Description: Script on python3 for cleaning ~/.cache folder on Ubuntu/Debian based systems. Use cache-cleaner in terminal to start it or -h (--help) for assistant.

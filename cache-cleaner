@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import os
+import time
+import shutil
+import argparse
+from pathlib import Path
+import subprocess
+
+WhiteList = [
+    "mesa_shader_cache", "nvidia", "fontconfig", "thumbnails", "icon-cache.kcache",
+    "ibus", "ibus-table", "gjs", "gnome-shell", "app-info", "wallpaper",
+    "flatpak", "pip", "ms-playwright", "electron",
+    "gstreamer-1.0", "evolution", "tracker", "tracker3"
+]
+
+cache_path = Path.home() / ".cache"
+config_path = Path.home() / ".config" / "cache-cleaner" / "config.txt"
+Default_lang = "en"
+
+Locales = {
+    "en": {
+        "start_v": "Cache cleaner - Version 1",
+        "analysis": f"--== Analysis of {cache_path} ==--",
+        "title_del": "\n== Deleting ==",
+        "title_can": "\n== Can be deleted ==",
+        "title_not": "\n== Will not be deleted ==",
+        "title_white": "\n== White list ==",
+        "deleting_item": "Deleting",
+        "can_delete_item": "Can delete",
+        "not_deleted_item": "Not deleted",
+        "last_access": "last access:",
+        "ago": "ago",
+        "in_white": "is in the white list.",
+        "done": "done!",
+        "error": "error",
+        "notify_title": "Cache Cleaner",
+        "res_dry": "You can clear {:.2f} MB of cache.",
+        "res_none": "Cache not cleared, last access less than 7 days",
+        "res_done": "Cleared {:.2f} MB of cache."
+    },
+    "ru": {
+        "start_v": "Cache cleaner - Версия 1",
+        "analysis": f"--== Анализ папки {cache_path} ==--",
+        "title_del": "\n== Удаление ==",
+        "title_can": "\n== Можно удалить ==",
+        "title_not": "\n== Не будет удалено ==",
+        "title_white": "\n== Белый список ==",
+        "deleting_item": "Удаляется",
+        "can_delete_item": "Можно удалить",
+        "not_deleted_item": "Не удалено",
+        "last_access": "последний доступ:",
+        "ago": "назад",
+        "in_white": "в белом списке.",
+        "done": "готово!",
+        "error": "ошибка",
+        "notify_title": "Чистка кэша",
+        "res_dry": "Можно очистить {:.2f} МБ кэша.",
+        "res_none": "Кэш не очищен, последний доступ менее 7 дней",
+        "res_done": "Очищено {:.2f} МБ кэша."
+    }
+}
+
+def get_size(start_path='.'):
+    total_size = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(start_path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if not os.path.islink(fp):
+                    total_size += os.path.getsize(fp)
+    except: pass
+    return total_size / (1024 * 1024)
+
+def save_config(lang_code):
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(lang_code)
+        
+def load_config():
+    if config_path.exists():
+        return config_path.read_text().strip()
+    return Default_lang
+    
+def clean_cache(dry_run=False, still_del=False, language=None):
+    total_freed = 0
+    total_mfreed = 0
+    
+    print(language['start_v'])
+    time.sleep(0.65) 
+    os.system("clear")
+    print(language['analysis'])
+    time.sleep(0.4)
+
+    dirlist = list(cache_path.iterdir())
+    items, items2, items3, items4 = [], [], [], []
+
+    for item in dirlist:
+        try:
+            size = get_size(item)
+            last_access = (time.time() - item.stat().st_atime) / 86400
+
+            if item.name in WhiteList:
+                items2.append([item, size])
+            elif dry_run and last_access > 7:
+                items3.append([item, size])
+            elif last_access < 7 and not still_del:
+                items4.append([item, size, last_access])
+            else:
+                items.append([item, size])
+        except Exception as e:
+            print(f"{language['error']}: {item.name}, {e}")
+
+    if items:
+        print(language['title_del'])
+        for item in items:
+            print(f"{language['deleting_item']} {item[0].name} ({item[1]:.2f} MB) . . .", end=' ', flush=True)
+            try:
+                if item[0].is_file(): item[0].unlink()
+                else: shutil.rmtree(item[0])
+                print(language['done'])
+                total_freed += item[1]
+            except Exception as e:
+                print(f"{language['error']}: {e}")
+
+    if items3:
+        print(language['title_can'])
+        for item in items3:
+            print(f"{language['can_delete_item']} {item[0].name} ({item[1]:.2f} MB).")
+            total_mfreed += item[1]
+
+    if items4:
+        print(language['title_not'])
+        for item in items4:
+            print(f"{language['not_deleted_item']} {item[0].name} ({item[1]:.2f} MB), {language['last_access']} {item[2]:.1f} {language['ago']}.")
+
+    if items2:
+        print(language['title_white'])
+        for item in items2:
+            print(f"{item[0].name} ({item[1]:.2f} MB) {language['in_white']}")
+
+    if dry_run:
+        result = language['res_dry'].format(total_mfreed)
+    elif total_freed == 0:
+        result = language['res_none']
+    else:
+        result = language['res_done'].format(total_freed)
+    
+    subprocess.run(["notify-send", "-i", "drive-harddisk", language['notify_title'], result])
+
+if __name__ == "__main__":
+    saved_lang = load_config()
+    
+    desc = "Чистка кэша" if saved_lang == "ru" else "Cache cleaning tool"
+    parser = argparse.ArgumentParser(description=desc)
+    
+    parser.add_argument("-d", "--dry-run", action="store_true", help="Запускает пробный запуск, файлы не будут удалены." if saved_lang == "ru" else "Starting a dry run, files will be not touched.")
+    parser.add_argument("-s", "--still-del", action="store_true", help="Если какой либо папке менее 7 дней, она не будет удалена без этого флага." if saved_lang == "ru" else "If any folder is less than 7 days old, it will not be deleted without this flag.")
+    parser.add_argument("-l", "--language", default=saved_lang, choices=["ru", "en"], help="Сменить язык" if saved_lang == "ru" else "Change language")
+    
+    args = parser.parse_args()
+    
+    if args.language != saved_lang:
+        save_config(args.language)
+    
+    lang_dict = Locales[args.language]
+    clean_cache(dry_run=args.dry_run, still_del=args.still_del, language=lang_dict)
