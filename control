@@ -1,0 +1,8 @@
+Package: cache-cleaner
+Version: 1.0
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3
+Maintainer: YourName <you@example.com>
+Description: Скрипт на python3 для очистки папки ~/.cache, с белым списом и пробным запуском.
